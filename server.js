@@ -25,14 +25,13 @@ app.get("/health", (_, res) => {
 // ===============================
 // UTILS
 // ===============================
-const delay = (ms) => new Promise((r) => setTimeout(r, ms));
-
 async function connectBrowser() {
   if (!BROWSER_WS) throw new Error("BROWSER_WS env missing in Render");
 
   return puppeteer.connect({
     browserWSEndpoint: BROWSER_WS,
     defaultViewport: { width: 1366, height: 768 },
+    ignoreHTTPSErrors: true,
   });
 }
 
@@ -53,91 +52,6 @@ async function blockCloudflare(page) {
     throw new Error("Blocked by Cloudflare");
   }
 }
-
-// ===============================
-// SCREENSHOT
-// ===============================
-app.post("/screenshot", async (req, res) => {
-  const { url } = req.body;
-
-  if (!url) {
-    return res.status(400).json({ success: false, error: "url missing" });
-  }
-
-  let browser, page;
-
-  try {
-    browser = await connectBrowser();
-    page = await browser.newPage();
-
-    await page.setUserAgent(
-      "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 Chrome/120 Safari/537.36"
-    );
-
-    await safeGoto(page, url);
-
-    const buffer = await page.screenshot({ fullPage: true });
-
-    return res.json({
-      success: true,
-      url,
-      screenshotBase64: buffer.toString("base64"),
-    });
-  } catch (err) {
-    return res.status(500).json({ success: false, error: err.message });
-  } finally {
-    try {
-      if (page) await page.close();
-    } catch {}
-    try {
-      if (browser) await browser.disconnect();
-    } catch {}
-  }
-});
-
-// ===============================
-// PDF
-// ===============================
-app.post("/pdf", async (req, res) => {
-  const { url } = req.body;
-
-  if (!url) {
-    return res.status(400).json({ success: false, error: "url missing" });
-  }
-
-  let browser, page;
-
-  try {
-    browser = await connectBrowser();
-    page = await browser.newPage();
-
-    await page.setUserAgent(
-      "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 Chrome/120 Safari/537.36"
-    );
-
-    await safeGoto(page, url);
-
-    const buffer = await page.pdf({
-      format: "A4",
-      printBackground: true,
-    });
-
-    return res.json({
-      success: true,
-      url,
-      pdfBase64: buffer.toString("base64"),
-    });
-  } catch (err) {
-    return res.status(500).json({ success: false, error: err.message });
-  } finally {
-    try {
-      if (page) await page.close();
-    } catch {}
-    try {
-      if (browser) await browser.disconnect();
-    } catch {}
-  }
-});
 
 // ===============================
 // SCRAPE
@@ -161,6 +75,7 @@ app.post("/scrape", async (req, res) => {
       "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 Chrome/120 Safari/537.36"
     );
 
+    // open category page
     await safeGoto(page, startUrl);
     await blockCloudflare(page);
 
@@ -240,74 +155,8 @@ app.post("/scrape", async (req, res) => {
 });
 
 // ===============================
-// LOGIN (SAFE)
-// ===============================
-app.post("/login", async (req, res) => {
-  const { email, password } = req.body;
-
-  if (!email || !password) {
-    return res
-      .status(400)
-      .json({ success: false, error: "email or password missing" });
-  }
-
-  let browser, page;
-
-  try {
-    browser = await connectBrowser();
-    page = await browser.newPage();
-
-    // Go to homepage
-    await page.goto("https://www.jamesedition.com", {
-      waitUntil: "domcontentloaded",
-      timeout: 60000,
-    });
-
-    // Wait for Cloudflare + JS
-    await page.waitForFunction(() => {
-      return document.querySelector("button.js-login") !== null;
-    }, { timeout: 45000 });
-
-    // Click login
-    await page.click("button.js-login");
-
-    // Wait for modal
-    await page.waitForSelector('input[type="email"]', { timeout: 20000 });
-
-    await page.type('input[type="email"]', email, { delay: 80 });
-    await page.type('input[type="password"]', password, { delay: 80 });
-
-    await page.click('button[type="submit"]');
-
-    // Wait until user is logged in (login button disappears)
-    await page.waitForFunction(() => {
-      return !document.querySelector("button.js-login");
-    }, { timeout: 30000 });
-
-    const cookies = await page.cookies();
-
-    return res.json({
-      success: true,
-      cookies,
-    });
-  } catch (err) {
-    return res.status(500).json({
-      success: false,
-      error: err.message,
-    });
-  } finally {
-    try {
-      if (page) await page.close();
-    } catch {}
-    try {
-      if (browser) await browser.disconnect();
-    } catch {}
-  }
-});
-
-// ===============================
 const PORT = process.env.PORT || 4000;
 
 app.listen(PORT, "0.0.0.0", () => {
-  console.log("🚀 Universal Puppeteer Service running on port " + PORT);
+  console.log("🚀 Puppeteer Scrape API running on port " + PORT);
 });
