@@ -60,10 +60,9 @@ app.post("/scrape", async (req, res) => {
   const { startUrl, category } = req.body;
 
   if (!startUrl || !category) {
-    return res.status(400).json({
-      success: false,
-      error: "startUrl or category missing",
-    });
+    return res
+      .status(400)
+      .json({ success: false, error: "startUrl or category missing" });
   }
 
   let browser, page;
@@ -76,9 +75,7 @@ app.post("/scrape", async (req, res) => {
       "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 Chrome/120 Safari/537.36"
     );
 
-    // -------------------------------
-    // OPEN CATEGORY PAGE
-    // -------------------------------
+    // open category page
     await safeGoto(page, startUrl);
     await blockCloudflare(page);
 
@@ -102,16 +99,10 @@ app.post("/scrape", async (req, res) => {
     const chosen = unique[Math.floor(Math.random() * unique.length)];
 
     // -------------------------------
-    // OPEN LISTING PAGE
+    // OPEN LISTING
     // -------------------------------
     await safeGoto(page, chosen);
     await blockCloudflare(page);
-
-    // ⏳ wait for description to load
-    await page.waitForSelector(
-      ".je2-read-more__preview._original",
-      { timeout: 15000 }
-    );
 
     // -------------------------------
     // EXTRACT DATA
@@ -127,29 +118,21 @@ app.post("/scrape", async (req, res) => {
 
       const price =
         text(".je2-listing-info__price span") ||
+        text(".ListingCard__price") ||
         meta("product:price:amount") ||
         meta("og:price:amount");
 
-      const description =
-        text(".je2-read-more__preview._original") ||
-        meta("og:description");
-
       return {
         title: meta("og:title") || text("h1"),
-        description,
+        description: meta("og:description"),
         image: meta("og:image"),
         url: meta("og:url"),
         price,
       };
     });
 
-    if (!data.title || !data.price) {
-      throw new Error("Invalid listing data");
-    }
+    if (!data.title || !data.price) throw new Error("Invalid listing data");
 
-    // -------------------------------
-    // RESPONSE
-    // -------------------------------
     return res.json({
       success: true,
       category,
@@ -160,10 +143,7 @@ app.post("/scrape", async (req, res) => {
       images: data.image ? [data.image] : [],
     });
   } catch (err) {
-    return res.status(500).json({
-      success: false,
-      error: err.message,
-    });
+    return res.status(500).json({ success: false, error: err.message });
   } finally {
     try {
       if (page) await page.close();
@@ -180,3 +160,7 @@ const PORT = process.env.PORT || 4000;
 app.listen(PORT, "0.0.0.0", () => {
   console.log("🚀 Puppeteer Scrape API running on port " + PORT);
 });
+
+
+
+just tell me from which tag the description is taking?
